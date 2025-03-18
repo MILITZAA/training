@@ -16,16 +16,19 @@ class MySQLConnector:
         Loads credentials from the YAML file.
         """
         with open(self.cred_file, 'r') as file:
-            self.credentials = yaml.safe_load(file)['mysql']
-            self.user = self.credentials['user']
-            self.password = self.credentials['password']
-            self.host = self.credentials['host']
-            self.port = self.credentials.get('port', 3306) #add port if exists, default 3306
-            self.database = self.credentials['database']
+            self.credentials = yaml.safe_load(file)
+        # Assuming your YAML structure has 'mysql' as the main key
+        # If your YAML structure differs, adjust the key accordingly
+        self.credentials = self.credentials['mysql'] 
+        self.user = self.credentials['user']
+        self.password = self.credentials['password']
+        self.host = self.credentials['host']
+        self.port = self.credentials.get('port', 3306)  # Use .get() for safety and a default value
+        self.database = self.credentials['database']
 
     def get_connection(self):
         """
-        Establishes connection to the MySQL database using SQLAlchemy and returns a connection object.
+        Establishes connection to the MySQL database using SQLAlchemy and returns an engine.
         """
         if not self.engine:
             connection_str = (
