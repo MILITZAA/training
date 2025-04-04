@@ -1,31 +1,33 @@
 import couchdb
-import json
+import yaml
 import logging
 from typing import Dict, List, Any, Optional
 
-# Configurar logging (opcional, puedes personalizarlo)
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 class CouchDBClient:
     """
     Una clase de Python para interactuar con CouchDB.
-
-    Esta clase maneja la conexión al servidor CouchDB, la ejecución de Mango Queries
-    y la realización de peticiones de vistas temporales.
+    Carga la configuración desde un archivo YAML.
     """
 
-    def __init__(self, url: str, db_name: str, username: Optional[str] = None, password: Optional[str] = None):
+    def __init__(self, config_file: str):
         """
-        Inicializa la clase CouchDBClient.
+        Inicializa la clase CouchDBClient cargando la configuración desde un archivo YAML.
 
         Args:
-            url: La URL del servidor CouchDB (por ejemplo, 'http://localhost:5984').
-            db_name: El nombre de la base de datos con la que se interactúa.
-            username: (Opcional) Nombre de usuario para la autenticación de CouchDB.
-            password: (Opcional) Contraseña para la autenticación de CouchDB.
+            config_file: La ruta al archivo YAML de configuración.
         """
         try:
+            with open(config_file, 'r') as f:
+                config = yaml.safe_load(f)
+            couchdb_config = config['couchdb']
+            url = couchdb_config['url']
+            db_name = couchdb_config['db_name']
+            username = couchdb_config.get('username')
+            password = couchdb_config.get('password')
+
             if username and password:
                 self.couch = couchdb.Server(f'http://{username}:{password}@{url.split("//")[1]}')
             else:
@@ -37,8 +39,15 @@ class CouchDBClient:
             else:
                 self.db = self.couch.create(db_name)
                 logging.info(f"Creada y conectada a la base de datos: {db_name}")
+
+        except FileNotFoundError:
+            logging.error(f"Archivo de configuración no encontrado: {config_file}")
+            raise
+        except KeyError as e:
+            logging.error(f"Falta una clave requerida en el archivo de configuración: {e}")
+            raise
         except couchdb.http.ResourceNotFound:
-            logging.error(f"Base de datos '{db_name}' no encontrada en el servidor.")
+            logging.error(f"Base de datos no encontrada en el servidor.")
             raise
         except Exception as e:
             logging.error(f"Error al conectar con CouchDB: {e}")
@@ -47,14 +56,6 @@ class CouchDBClient:
     def run_mango_query(self, query: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Ejecuta una Mango Query en la base de datos CouchDB.
-
-        Args:
-            query: La Mango Query en formato de diccionario.
-
-        Returns:
-            Una lista de documentos que coinciden con la consulta.
-            Devuelve una lista vacía si no hay documentos coincidentes o si
-            ocurre un error.
         """
         try:
             result = list(self.db.find(query))
@@ -80,7 +81,7 @@ class CouchDBClient:
             Devuelve una lista vacía si ocurre un error.
         """
         try:
-            result = list(self.db.view(map=map_fun, reduce=reduce_fun))
+            result = list(self.db.view(map=map_fun, reduce=reduce_fun, ddoc=None))  # Explicitly set ddoc to None
             logging.info(f"Vista temporal ejecutada correctamente. Resultado: {len(result)} filas.")
             return result
         except couchdb.http.ResourceNotFound:
@@ -93,12 +94,6 @@ class CouchDBClient:
     def create_document(self, document: Dict[str, Any]) -> str:
         """
         Crea un nuevo documento en la base de datos.
-
-        Args:
-            document: El documento a crear como un diccionario.
-
-        Returns:
-            El ID del documento creado.
         """
         try:
             doc_id, doc_rev = self.db.save(document)
@@ -108,16 +103,9 @@ class CouchDBClient:
             logging.error(f"Error al crear documento: {e}")
             raise
 
-
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """
         Obtiene un documento por su ID.
-
-        Args:
-            doc_id: El ID del documento a obtener.
-
-        Returns:
-            El documento como un diccionario, o None si no se encuentra.
         """
         try:
             return self.db.get(doc_id)
